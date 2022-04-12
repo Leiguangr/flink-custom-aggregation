@@ -18,21 +18,10 @@
 
 package com.ververica.field.dynamicrules.functions;
 
-import static com.ververica.field.dynamicrules.functions.ProcessingUtils.addToStateValuesSet;
-import static com.ververica.field.dynamicrules.functions.ProcessingUtils.handleRuleBroadcast;
-
-import com.ververica.field.dynamicrules.Alert;
-import com.ververica.field.dynamicrules.FieldsExtractor;
-import com.ververica.field.dynamicrules.Keyed;
-import com.ververica.field.dynamicrules.Rule;
+import com.ververica.field.dynamicrules.*;
 import com.ververica.field.dynamicrules.Rule.ControlType;
 import com.ververica.field.dynamicrules.Rule.RuleState;
-import com.ververica.field.dynamicrules.RuleHelper;
 import com.ververica.field.dynamicrules.RulesEvaluator.Descriptors;
-import com.ververica.field.dynamicrules.Transaction;
-import java.math.BigDecimal;
-import java.util.*;
-import java.util.Map.Entry;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.flink.api.common.accumulators.SimpleAccumulator;
 import org.apache.flink.api.common.state.BroadcastState;
@@ -46,6 +35,16 @@ import org.apache.flink.metrics.Meter;
 import org.apache.flink.metrics.MeterView;
 import org.apache.flink.streaming.api.functions.co.KeyedBroadcastProcessFunction;
 import org.apache.flink.util.Collector;
+
+import java.math.BigDecimal;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Optional;
+import java.util.Set;
+
+import static com.ververica.field.dynamicrules.functions.ProcessingUtils.addToStateValuesSet;
+import static com.ververica.field.dynamicrules.functions.ProcessingUtils.handleRuleBroadcast;
 
 /** Implements main rule evaluation and alerting logic. */
 @Slf4j
@@ -87,7 +86,8 @@ public class DynamicAlertFunction
     addToStateValuesSet(windowState, currentEventTime, value.getWrapped());
 
     long ingestionTime = value.getWrapped().getIngestionTimestamp();
-    ctx.output(Descriptors.latencySinkTag, System.currentTimeMillis() - ingestionTime);
+    long latency = System.currentTimeMillis() - ingestionTime;
+    ctx.output(Descriptors.latencySinkTag, latency);
 
     Rule rule = ctx.getBroadcastState(Descriptors.rulesDescriptor).get(value.getId());
 
@@ -120,7 +120,10 @@ public class DynamicAlertFunction
               + " : "
               + aggregateResult.toString()
               + " -> "
-              + ruleResult);
+              + ruleResult
+              + " (Latency: "
+              + latency
+              + " )");
 
       if (ruleResult) {
         if (COUNT_WITH_RESET.equals(rule.getAggregateFieldName())) {
